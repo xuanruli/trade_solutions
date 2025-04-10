@@ -51,6 +51,4 @@
 |------|------|------|------|------|
 | 1.20 | 0.80 | 0.70 | 1.10 | 1.31 |
 
-: Rolling Delta {.striped .hover}
-
 - Maxium Drawdown Ratio
