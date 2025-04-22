@@ -1,7 +1,7 @@
 # Pairs Finding
 1. use Hierarchical Clustering
 2. use fundemental approach to find industry neutural pairs
-3. use information 
+3. use IC information
 
 ```python
 from polygon.rest import RESTClient
