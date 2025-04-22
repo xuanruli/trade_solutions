@@ -1,5 +1,5 @@
 
 * [Home](/)
-* [About](#/about)
+* [About](/about)
 * [Indicators](/indicators)
 * [Sample pairs](/pairs/)

@@ -1,4 +1,4 @@
 
 * [Home](/)
-* [Backtest](#/backtest/)
-* [Pairs](#/pairs/)
+* [Backtest](/backtest/)
+* [Pairs](/pairs/)
