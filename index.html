@@ -6,6 +6,14 @@
     <link rel="icon" href="../favicon.ico" type="image/x-icon">
     <title>Pairs Trading</title>
     <!-- Plotly.js for interactive charts -->
+    <div class="author-info mb-4">
+        <small class="text-muted">
+            Created by <strong>Ryan Li , Xingjian Yin</strong> | Duke University Financial Technology | 533
+            <a href="https://www.youtube.com/watch?v=YOUR_VIDEO_ID" target="_blank" class="text-decoration-none">
+                <i class="bi bi-youtube"></i> Watch demo video
+            </a>
+        </small>
+    </div>
     <script src="https://cdn.plot.ly/plotly-2.26.2.min.js"></script>
     <!-- DataTables for interactive tables -->
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
@@ -95,22 +103,62 @@
         <div class="tab-content" id="myTabContent">
             <!-- Price & Spread Chart -->
             <div class="tab-pane fade show active" id="price" role="tabpanel">
+                <!-- Add explanation section before charts -->
+                <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
+                    <h4>Price and Spread Analysis</h4>
+                    <p><strong>Strategy Overview:</strong> This pairs trading strategy leverages the correlation between LEVI and MHK stock prices. When the spread deviates from its historical mean, we anticipate mean reversion.</p>
+                    <ul>
+                        <li><strong>Price Chart</strong> - Shows price movements of LEVI and MHK stocks, highlighting their correlation patterns</li>
+                        <li><strong>Spread Chart</strong> - Displays LEVI-MHK spread, with widening spread indicating relative divergence between the two stocks</li>
+                        <li><strong>Trading Opportunities</strong> - Mean reversion opportunities emerge when the spread reaches extreme values</li>
+                    </ul>
+                </div>
                 <div id="price-chart" class="chart-container"></div>
                 <div id="spread-chart" class="chart-container"></div>
             </div>
             
             <!-- Z-Score & Signals Chart -->
             <div class="tab-pane fade" id="zscore" role="tabpanel">
+                <!-- Add explanation section before chart -->
+                <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
+                    <h4>Z-Score and Trading Signals</h4>
+                    <p><strong>Strategy Overview:</strong> Z-score standardizes the spread deviation from its mean. Trading signals are triggered when Z-scores exceed set thresholds.</p>
+                    <ul>
+                        <li><strong>Z-Score</strong> - Represents how many standard deviations the spread is from its historical mean</li>
+                        <li><strong>Trading Signals</strong> - Green triangles indicate buy signals, red triangles indicate sell signals</li>
+                        <li><strong>Threshold Lines</strong> - Dashed lines show trading trigger thresholds (±1.0)</li>
+                    </ul>
+                </div>
                 <div id="zscore-chart" class="chart-container"></div>
             </div>
             
             <!-- Portfolio Value Chart -->
             <div class="tab-pane fade" id="portfolio" role="tabpanel">
+                <!-- Add explanation section before chart -->
+                <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
+                    <h4>Portfolio Performance</h4>
+                    <p><strong>Strategy Overview:</strong> Portfolio value reflects the overall performance of the pairs trading strategy, including both cash and stock positions.</p>
+                    <ul>
+                        <li><strong>Initial Investment</strong> - Starting with $100,000</li>
+                        <li><strong>Value Fluctuations</strong> - Shows changes in portfolio value throughout strategy execution</li>
+                        <li><strong>Drawdown Analysis</strong> - Maximum peak-to-trough decline is a key metric for assessing strategy risk</li>
+                    </ul>
+                </div>
                 <div id="portfolio-chart" class="chart-container"></div>
             </div>
             
             <!-- Positions Chart -->
             <div class="tab-pane fade" id="positions" role="tabpanel">
+                <!-- Add explanation section before chart -->
+                <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
+                    <h4>Position Management</h4>
+                    <p><strong>Strategy Overview:</strong> Pairs trading typically involves simultaneous long and short positions in two correlated stocks to balance market risk.</p>
+                    <ul>
+                        <li><strong>Position Rotation</strong> - Shows changes in LEVI and MHK stock positions over time</li>
+                        <li><strong>Hedging Effect</strong> - Positions in the two stocks are often in opposite directions, providing a natural hedge</li>
+                        <li><strong>Market Neutrality</strong> - Combined long-short approach helps reduce overall market exposure</li>
+                    </ul>
+                </div>
                 <div id="positions-chart" class="chart-container"></div>
             </div>
         </div>
@@ -206,7 +254,7 @@
         }
         
         function parseLedgerCSV(text) {
-            const lines = text.split('\n');
+            const lines = text.replace(/\r/g, '').split('\n'); 
             const headers = lines[0].split(',');
             
             for (let i = 1; i < lines.length; i++) {
@@ -221,10 +269,11 @@
                 
                 ledgerData.push(entry);
             }
+            console.log("Parsed Ledger Data:", ledgerData);
         }
         
         function parseBlotterCSV(text) {
-            const lines = text.split('\n');
+            const lines = text.replace(/\r/g, '').split('\n'); 
             const headers = lines[0].split(',');
             
             for (let i = 1; i < lines.length; i++) {
@@ -254,8 +303,8 @@
             const portfolioValues = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseFloat(d.portfolio_value));
             
             // Positions
-            const leviPositions = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseInt(d.cumulative_position));
-            const mhkPositions = ledgerData.filter(d => d.ticker === 'MHK').map(d => parseInt(d.cumulative_position));
+            const leviPositions = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseFloat(d.cumulative_position));
+            const mhkPositions = ledgerData.filter(d => d.ticker === 'MHK').map(d => parseFloat(d.cumulative_position));
             
             // Z-scores (from blotter)
             const zscores = blotterData.map(d => parseFloat(d.zscore));
@@ -459,8 +508,8 @@
                     <td>$${parseFloat(row.commission).toFixed(4)}</td>
                     <td>$${parseFloat(row.cash).toFixed(2)}</td>
                     <td>$${parseFloat(row.portfolio_value).toFixed(2)}</td>
-                    <td>${row.position}</td>
-                    <td>${row.cumulative_position}</td>
+                    <td>${parseInt(row.position)}</td>
+                    <td>${parseInt(row.cumulative_position)}</td> 
                 `;
                 ledgerBody.appendChild(tr);
             });
