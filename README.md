@@ -1,448 +1,72 @@
-# Pairs Finding
-1. use Hierarchical Clustering
-2. use fundemental approach to find industry neutural pairs
-3. use IC information in the future
-
-```python
-from polygon.rest import RESTClient
-
-client = RESTClient("5MKBfYvCSCPekWl824p5l2aSHIIjqh_p")
-main_exchanges = ["XNYS", "XNAS", "XASE"] 
-tickers = []
-for ex in main_exchanges:
-	for t in client.list_tickers(
-		market="stocks",
-		exchange=ex,
-		active="true",
-		order="asc",
-		limit="100",
-		sort="ticker",
-	):
-		tickers.append(t.ticker)
-
-tickers = list(set(tickers))
-print(tickers)
-
-```
-
-```python
-aggs = []
-for a in client.list_aggs(
-        "FHB",
-        1,
-        "day",
-        "2020-04-01",
-        "2025-04-01",
-        adjusted="true",
-        sort="asc",
-        limit=50000,
-    ):
-        aggs.append(a.close)
-print(len(aggs))
-```
-
-```python
-
-import pandas as pd
-import numpy as np
-
-df = pd.DataFrame(
-    columns=tickers
-)
-
-for t in tickers:
-    aggs = []
-    for a in client.list_aggs(
-        t,
-        1,
-        "day",
-        "2020-04-01",
-        "2025-04-01",
-        adjusted="true",
-        sort="asc",
-        limit=50000,
-    ):
-        
-        aggs.append(a.close)
-    if len(aggs) != 1242:
-        continue
-    df[t] = aggs
-
-```
-
-```python
-df = df.dropna(axis=1).copy()
-train, test = df.iloc[:int(1243*0.8)].copy(), df.iloc[int(1243*0.8):].copy()
-train = train.apply(lambda x: np.log(x))
-train_standard = train.apply(lambda x: (x - x.mean())/ x.std())
-X = train_standard.T 
-```
-
-```python
-test = test.apply(lambda x: np.log(x))
-```
-
-```python
-X
-```
-
-```python
-from scipy.cluster.hierarchy import linkage
-Z = linkage(X, method='single')
-first_merges = Z[:3735//2]
-first_merges
-```
-
-```python
-tickers[3107], tickers[3108]
-```
-
-```python
-from scipy.cluster.hierarchy import linkage
-import heapq
-
-def find_pairs_with_single_linkage(data):
-    tickers = data.index.tolist()
-    n = data.shape[0]
-    Z = linkage(data, method='single')
-    first_merges = Z[:n//2]
-
-    pairs = []
-    result = []
-    for row in first_merges:
-        idx1, idx2 = int(row[0]), int(row[1])
-        if idx1 < n and idx2 < n:
-            ticker1 = tickers[idx1]
-            ticker2 = tickers[idx2]
-            distance = row[2]
-            heapq.heappush(pairs, (distance, ticker1, ticker2))
-            if len(pairs) > 50:
-                _, t1, t2 = heapq.heappop(pairs)
-    
-    while pairs:
-        distance, t1, t2 = heapq.heappop(pairs)
-        result.append((t1, t2, distance))
-
-    result.reverse()
-    return result
-
-potential_pairs = find_pairs_with_single_linkage(X)
-potential_pairs
-    
-```
-
-## Cointegration (Pairs validation)
-We already find some pairs through clustering, now we need to validate these pairs from cointegration
-
-```python
-from statsmodels.tsa.stattools import coint
-
-def validate_pairs(df, pairs):
-    result = []
-    for t1, t2, _ in pairs:
-        score, pvalue, _ = coint(df[t1], df[t2])
-
-        result.append({
-                'ticker1': t1,
-                'ticker2': t2,
-                'coint_score': score,
-                'p_value': pvalue,
-                'is_cointegrated': pvalue < 0.06  
-            })
-        
-    result_df = pd.DataFrame(result)
-    result_df = result_df.sort_values('p_value')
-    
-    return result_df
-
-validate_pairs(train, potential_pairs)
-
-```
-
-As we can see some of them are actually same company or same type of assets deliveried by different companies, after excluding such pairs, we still have about 5 pairs can be potential pairs targets, now let's pick one pair first (SUSC, VTC) to build some trading strategy
-
-```python
-import matplotlib.pyplot as plt
-
-def plot_price(a, b, train):
-
-    stock_a = train[a]
-    stock_b = train[b]
-    spread = stock_a - stock_b
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, gridspec_kw={'height_ratios': [2, 1]})
-
-    ax1.plot(stock_a, label=stock_a.name, color='blue', marker='o')
-    ax1.plot(stock_b, label=stock_b.name, color='red', marker='o')
-    ax1.set_title('Train Price history')
-    ax1.set_ylabel('Price')
-    ax1.legend()
-    ax1.grid(True)
-
-    data_length = len(stock_a)
-    tick_positions = np.linspace(0, data_length-1, 5, dtype=int)
-    tick_labels = ['2020', '2021', '2022', '2023', '2024']
-
-    ax1.set_xticks(tick_positions)
-    ax1.set_xticklabels([]) 
-
-    ax2.plot(spread, label='spread', color='green', marker='o')
-    ax2.set_xlabel('time')
-    ax2.set_ylabel('spread')
-    ax2.axhline(y=0, color='gray', linestyle='--') 
-    ax2.grid(True)
-    ax2.legend()
-
-    ax2.set_xticks(tick_positions)
-    ax2.set_xticklabels(tick_labels)
-
-    plt.tight_layout()
-    plt.show()
-
-plot_price("LEVI", "MHK", train)
-```
-
-As we can see spread is jumping up and down around -2, which indicate good opportunity for pairs trading, let plot another one
-
-```python
-plot_price("SHO","XHR", train)
-```
-
-this above pair has some period with going up and down together period, which indicate we need to do some trend following strategy transition from pairs trading to increase profit
-
-# Trading and Backtesting and forward testing
-
-if the z score is too large, it means spread is too positive, so we long the l
-
-```python
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
-def hybrid_trading_strategy(test_data, ticker1, ticker2, train_mean, train_std):
-    data = test_data.copy()
-    
-    data['spread'] = data[ticker1] - data[ticker2]
-    
-    data['zscore'] = (data['spread'] - train_mean) / train_std
-    
-    data[f'{ticker1}_ret'] = data[ticker1].pct_change(5)
-    data[f'{ticker2}_ret'] = data[ticker2].pct_change(5)
-    
-    data[f'{ticker1}_trend'] = data[ticker1].rolling(10).mean() > data[ticker1].rolling(25).mean()
-    data[f'{ticker2}_trend'] = data[ticker2].rolling(10).mean() > data[ticker2].rolling(25).mean()
-    
-    data['same_trend'] = data[f'{ticker1}_trend'] == data[f'{ticker2}_trend']
-    data['strong_trend'] = (abs(data[f'{ticker1}_ret']) > 0.05) | (abs(data[f'{ticker2}_ret']) > 0.05)
-    
-    data['position'] = 0
-    data['strategy'] = 'none'
-    
-    for i in range(1, len(data)):
-        if data['position'].iloc[i-1] == 0:
-            if abs(data['zscore'].iloc[i]) > 1 and data['same_trend'].iloc[i] and data['strong_trend'].iloc[i]:
-                if data[f'{ticker1}_trend'].iloc[i]:
-                    data.loc[data.index[i], 'position'] = 1 if data[f'{ticker1}_ret'].iloc[i] > data[f'{ticker2}_ret'].iloc[i] else -1
-                    data.loc[data.index[i], 'strategy'] = 'trend_following'
-                else:
-                    data.loc[data.index[i], 'position'] = -1 if data[f'{ticker1}_ret'].iloc[i] > data[f'{ticker2}_ret'].iloc[i] else 1
-                    data.loc[data.index[i], 'strategy'] = 'trend_following'
-            elif data['zscore'].iloc[i] > 0.75:
-                data.loc[data.index[i], 'position'] = -1
-                data.loc[data.index[i], 'strategy'] = 'mean_reversion'
-            elif data['zscore'].iloc[i] < -0.75:
-                data.loc[data.index[i], 'position'] = 1
-                data.loc[data.index[i], 'strategy'] = 'mean_reversion'
-        else:
-            if data['strategy'].iloc[i-1] == 'mean_reversion':
-                if (data['position'].iloc[i-1] == 1 and data['zscore'].iloc[i] > -0.5) or \
-                   (data['position'].iloc[i-1] == -1 and data['zscore'].iloc[i] < 0.5) or \
-                   abs(data['zscore'].iloc[i]) > 2.0:
-                    data.loc[data.index[i], 'position'] = 0
-                    data.loc[data.index[i], 'strategy'] = 'none'
-                else:
-                    data.loc[data.index[i], 'position'] = data['position'].iloc[i-1]
-                    data.loc[data.index[i], 'strategy'] = data['strategy'].iloc[i-1]
-            elif data['strategy'].iloc[i-1] == 'trend_following':
-                if (data['position'].iloc[i-1] == 1 and data[f'{ticker1}_ret'].iloc[i] < 0) or \
-                   (data['position'].iloc[i-1] == -1 and data[f'{ticker1}_ret'].iloc[i] > 0) or \
-                   data['same_trend'].iloc[i] == False:
-                    data.loc[data.index[i], 'position'] = 0
-                    data.loc[data.index[i], 'strategy'] = 'none'
-                else:
-                    data.loc[data.index[i], 'position'] = data['position'].iloc[i-1]
-                    data.loc[data.index[i], 'strategy'] = data['strategy'].iloc[i-1]
-    
-    data['returns'] = data['position'].shift(1) * (data[ticker1] - data[ticker1].shift(1)) - \
-                     data['position'].shift(1) * (data[ticker2] - data[ticker2].shift(1))
-    
-    data['cumulative_returns'] = data['returns'].cumsum()
-    
-    return data
-
-def visualize_strategy(results, ticker1, ticker2):
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
-    
-    ax1.plot(results[ticker1], label=ticker1)
-    ax1.plot(results[ticker2], label=ticker2)
-    ax1.set_title('Price Movement')
-    ax1.legend()
-    ax1.grid(True)
-    
-    ax2.plot(results['zscore'], color='red')
-    ax2.axhline(y=1.0, color='green', linestyle='--')
-    ax2.axhline(y=-1.0, color='green', linestyle='--')
-    ax2.axhline(y=0.4, color='black', linestyle='-.')
-    ax2.axhline(y=-0.4, color='black', linestyle='-.')
-    ax2.axhline(y=0, color='gray', linestyle='-')
-    ax2.set_title('Z-Score')
-    ax2.grid(True)
-    
-    mean_rev_signals = results[results['strategy'] == 'mean_reversion']
-    trend_signals = results[results['strategy'] == 'trend_following']
-    
-    for idx, row in mean_rev_signals.iterrows():
-        if row['position'] == 1:
-            ax2.scatter(idx, row['zscore'], color='green', marker='^', s=100)
-        elif row['position'] == -1:
-            ax2.scatter(idx, row['zscore'], color='red', marker='v', s=100)
-    
-    for idx, row in trend_signals.iterrows():
-        if row['position'] == 1:
-            ax2.scatter(idx, row['zscore'], color='blue', marker='^', s=120, edgecolors='k')
-        elif row['position'] == -1:
-            ax2.scatter(idx, row['zscore'], color='purple', marker='v', s=120, edgecolors='k')
-    
-    ax3.plot(results['cumulative_returns'], color='blue')
-    ax3.set_title('Cumulative Returns')
-    ax3.grid(True)
-    ax3.set_ylabel('time')
-    
-    plt.tight_layout()
-    plt.show()
-    
-    print(f"total return: {results['cumulative_returns'].iloc[-1]:.2f}")
-    print(f"MDD: {(results['cumulative_returns'] - results['cumulative_returns'].cummax()).min():.2f}")
-    print(f"pairs trading times: {len(mean_rev_signals[mean_rev_signals['position'] != 0])}")
-    print(f"trend following time: {len(trend_signals[trend_signals['position'] != 0])}")
-
-def prepare_data_and_run(train_data, test_data, ticker1, ticker2):
-    
-    spread_train = train_data[ticker1] - train_data[ticker2]
-    train_mean = spread_train.mean()
-    train_std = spread_train.std()
-    
-    results = hybrid_trading_strategy(test_data, ticker1, ticker2, train_mean, train_std)
-    visualize_strategy(results, ticker1, ticker2)
-    
-    return results
-```
-
-first let's see how it perform on training data
-
-```python
-train_trading = train[["LEVI", "MHK"]]
-train_trading_data = prepare_data_and_run(train_trading, train_trading, "LEVI", "MHK")
-```
-
-it perform not bad and meet with out expectation, now let do test data
-
-```python
-train_trading = train[["LEVI", "MHK"]]
-test_trading = test[["LEVI", "MHK"]]
-test_trading_data = prepare_data_and_run(train_trading, test_trading, "LEVI", "MHK")
-```
-
-```python
-test_trading_data
-```
-
-# Blotter and Lotter
-
-```python
-
-
-def create_blotter(data, ticker1, ticker2, commission_rate=0.0005):
-    blotter = []
-    
-    for i in range(1, len(data)):
-        prev_pos = data['position'].iloc[i-1]
-        curr_pos = data['position'].iloc[i]
-        
-        if prev_pos != curr_pos:
-            trade_date = data.index[i]
-            ticker1_price = data[ticker1].iloc[i]
-            ticker2_price = data[ticker2].iloc[i]
-            
-            if prev_pos == 1:
-                blotter.append([trade_date, ticker1, 'SELL', ticker1_price, 1, ticker1_price * 1 * commission_rate, data['strategy'].iloc[i-1], data['zscore'].iloc[i]])
-                blotter.append([trade_date, ticker2, 'BUY', ticker2_price, 1, ticker2_price * 1 * commission_rate, data['strategy'].iloc[i-1], data['zscore'].iloc[i]])
-            elif prev_pos == -1:
-                blotter.append([trade_date, ticker1, 'BUY', ticker1_price, 1, ticker1_price * 1 * commission_rate, data['strategy'].iloc[i-1], data['zscore'].iloc[i]])
-                blotter.append([trade_date, ticker2, 'SELL', ticker2_price, 1, ticker2_price * 1 * commission_rate, data['strategy'].iloc[i-1], data['zscore'].iloc[i]])
-            
-            if curr_pos == 1:
-                blotter.append([trade_date, ticker1, 'BUY', ticker1_price, 1, ticker1_price * 1 * commission_rate, data['strategy'].iloc[i], data['zscore'].iloc[i]])
-                blotter.append([trade_date, ticker2, 'SELL', ticker2_price, 1, ticker2_price * 1 * commission_rate, data['strategy'].iloc[i], data['zscore'].iloc[i]])
-            elif curr_pos == -1:
-                blotter.append([trade_date, ticker1, 'SELL', ticker1_price, 1, ticker1_price * 1 * commission_rate, data['strategy'].iloc[i], data['zscore'].iloc[i]])
-                blotter.append([trade_date, ticker2, 'BUY', ticker2_price, 1, ticker2_price * 1 * commission_rate, data['strategy'].iloc[i], data['zscore'].iloc[i]])
-    
-    blotter_df = pd.DataFrame(blotter, columns=['date', 'ticker', 'action', 'price', 'quantity', 'commission', 'strategy', 'zscore'])
-    return blotter_df
-
-def create_lotter(blotter, initial_capital=100000):
-    lotter = []
-    
-    capital = initial_capital
-    positions = {}
-    
-    for i, row in blotter.iterrows():
-        date = row['date']
-        ticker = row['ticker']
-        action = row['action']
-        price = row['price']
-        quantity = row['quantity']
-        commission = row['commission']
-        
-        if action == 'BUY':
-            capital -= price * quantity + commission
-            positions[ticker] = positions.get(ticker, 0) + quantity
-        else:
-            capital += price * quantity - commission
-            positions[ticker] = positions.get(ticker, 0) - quantity
-        
-        portfolio_value = capital
-        for pos_ticker, pos_qty in positions.items():
-            if pos_ticker in blotter['ticker'].unique():
-                last_price = blotter[blotter['ticker'] == pos_ticker].iloc[-1]['price']
-                portfolio_value += pos_qty * last_price
-        
-        lotter.append([date, ticker, action, price, quantity, commission, capital, portfolio_value])
-    
-    lotter_df = pd.DataFrame(lotter, columns=['date', 'ticker', 'action', 'price', 'quantity', 'commission', 'cash', 'portfolio_value'])
-    return lotter_df
-```
-
-```python
-blotter = create_blotter(test_trading_data, "LEVI", "MHK")
-blotter
-```
-
-```python
-lotter = create_lotter(blotter)
-lotter
-```
-
-let's test if we have trend following for another pair
-
-```python
-train_trading = train[["SHO","XHR"]]
-test_trading = test[["SHO","XHR"]]
-test_trading_data = prepare_data_and_run(train_trading, test_trading, "SHO","XHR")
-```
-
-as we can see there is no trend following here, which indicate future improvement, in the future I will make the long and short at the same time and based on every pair's different maginitude consider different entry time and exit time
-
-
-
+# Finding Pairs
+1. We use hieratical clustering to from all the US stocks market to find n = 2 pairs, every pair are closest to each other in terms of historical price
+2. After that, we find about 1800 pairs of potential match, then we do cointegration to between them and find over 35+ potential pairs
+3. After that, we lock in three pairs: "LEVI" vs "MHK", "SYF" vs "COF", "V" vs "MA"
+
+
+### Hieratical clustering
+1. We use single linkage and only apply first layer for clustering to find closest pair. Specifically, minimum distance between any two points in the two clusters. Unlike K-Means, it does not require the number of clusters to be specified in advance.
+2. After that, we apply a min heap data structure to find top 50 most "lease" closest pair, the reason is that if we use max heap, all the 50 pairs are the same company or same asset. Hieratical clustering garuantee us even it's least similar pairs in most similar pairs, it's still close enough. Actually, we can find some typical pairs like "V vs MA" with this method to prove our method's efficiency
+
+### Cointegration and fudemental filter
+1. We apply cointegration and find 35+ potential pairs, by checking with ADF test that if the log spread is stationary for pairs.
+2. Most of pairs are very similar assets or same company's different class stock, we apply some fundemental approach (choose related company when considering their main business). For example, LEVI is a premium clothing company while MHK is a flooring manufacture company. They are all in regular comsumption company and should in certain extent grow together when macro factor like dropping interest rates and increasing Gini coefficient.
+
+## Data Prepration & Transformation
+### Log transformation for spread
+We use log spread when checking the spread between two pairs, the reason is that log spread is more stable and it's better to visualize that certain pairs has some stable relationship with their diff
+![alt text](image.png)
+*Figure 1: Spread after log transform*
+
+### Standarization
+After log transform, We apply transpose and standarization to before doing clustering to stablize our clustering result
+
+# Trading Strategy
+### Hybrid Strategy
+Our strategy **hybrid regula pairs trading main reversion and some momentum filtering: trend following**. The reason is that some macro factor may suddenly benefits certain company within the pair and we will close our pairs trading position and switch into trend following (long single side strong trend stock). This strategy is **intraday approach** and will be close next day, the reason is that our main focus is still on pairs trading and trend following is just scalping some short momentum to benefit our portfolio, and it doesn't mean that we think it's not overvalued. 
+* We measure trend with:
+```data[ticker1].rolling(10).mean() > data[ticker1].rolling(30).mean()) & (data[ticker1].rolling(5).mean() > data[ticker1].rolling(10).mean() ```
+
+* We switch to trend following when one of them has strong trend:
+```ticker1_strong_up and not ticker2_strong_up``` or ```ticker2_strong_up and not ticker1_strong_up```
+
+* We switch end trend following when they both don't have strong trend
+```ticker1_strong_up and ticker2_strong_up```
+
+## Trading Signal
+We made trade every day as long as there is trading signal
+### Z score threshold for spread
+When there is no active strategy and close action, we will measure the z score of log spread, we use rolling windows with (windows=len(train_data//2)) to better reflect current spread, this **signficantly** enhance our strategy because it's absorb current spread
+* We entry pairs trading streategy when:
+```current_zscore > 1.5``` or ```current_zscore < -1.5```
+We will short the overvalued stock and long the undervalued stock based on position chapter below
+* We exit pairs trading streategy when:
+```abs(current_zscore)```
+We will close all the previous cumulative position and it generally will gain large profit when it hit exit signal
+![alt text](image2.png)
+*Figure 2: Test result for LEVI vs MHK (Blue Star in Z score table is when we hit exit signal for pairs trading)*
+
+### Long short position balance:
+In order to match price magnitude difference between pairs, we use price ratio to allocate position for pairs. In this way, if there is any **together trend** of going up and down, our portfolio PL should cancel out:
+
+    total_value = price1 + price2
+            ticker1_portion = int(100 * price1 / total_value) if total_value > 0 else 0
+            ticker2_portion = int(100 * price2 / total_value) if total_value > 0 else 0
+
+
+# General Feature
+### Understanding for mixed strategy
+* The role of our short term trend following strategy is actually in order to balance slightly our portfolio in case of any maga news, financial statement surprise, we can see from figure our PnL increase a lot when close position for mean reversion and trend following keeps our portfolio stable when there is single side trend
+![alt text](image3.png)
+*Figure 3: Testing for SYF and COF (Purple is trend folllowing, blue is long and red is short)*
+### Blotter
+We trade every day when there is signal so our average price and position for position is updated and cumulative every day just like real trading:
+
+    data.loc[data.index[i], f'{ticker1}_position'] = curr_position_ticker1 + ticker1_portion
+    data.loc[data.index[i], f'{ticker2}_position'] = curr_position_ticker2 - ticker2_portion
+    data.loc[data.index[i], f'{ticker1}_cost'] = update_cost(curr_position_ticker1, curr_cost_ticker1, ticker1_portion, price1)
+    data.loc[data.index[i], f'{ticker2}_cost'] = update_cost(curr_position_ticker2, curr_cost_ticker2, -ticker2_portion, price2)
+
+### Improvement in the future
+1. The biggest improvement we need is still in terms of z score, for some pairs, the price in test time frame is hyped for both stock and our streategy cannot updated the correct z score threshold even if we have rolling windows. A possible improvement on that is probably using **percentile for z score instead of fixed value**
+2. We know in 2025 there are a lot of volitility happened and it may cause unexpected loss for our portfolio. Therefore, a careful stop loss should be set and we should close position when VIX is too high
