@@ -15,7 +15,7 @@
 ## Data Prepration & Transformation
 ### Log transformation for spread
 We use log spread when checking the spread between two pairs, the reason is that log spread is more stable and it's better to visualize that certain pairs has some stable relationship with their diff
-![alt text](image.png)
+![alt text](/picture/image.png)
 *Figure 1: Spread after log transform*
 
 ### Standarization
@@ -43,7 +43,7 @@ We will short the overvalued stock and long the undervalued stock based on posit
 * We exit pairs trading streategy when:
 ```abs(current_zscore)```
 We will close all the previous cumulative position and it generally will gain large profit when it hit exit signal
-![alt text](image2.png)
+![alt text](/picture/image2.png)
 *Figure 2: Test result for LEVI vs MHK (Blue Star in Z score table is when we hit exit signal for pairs trading)*
 
 ### Long short position balance:
@@ -57,7 +57,7 @@ In order to match price magnitude difference between pairs, we use price ratio t
 # General Feature
 ### Understanding for mixed strategy
 * The role of our short term trend following strategy is actually in order to balance slightly our portfolio in case of any maga news, financial statement surprise, we can see from figure our PnL increase a lot when close position for mean reversion and trend following keeps our portfolio stable when there is single side trend
-![alt text](image3.png)
+![alt text](/picture/image3.png)
 *Figure 3: Testing for SYF and COF (Purple is trend folllowing, blue is long and red is short)*
 ### Blotter
 We trade every day when there is signal so our average price and position for position is updated and cumulative every day just like real trading:
