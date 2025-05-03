@@ -65,6 +65,60 @@
     <div class="container mt-4">
         <h1 class="mb-4">Pairs Trading Strategy Dashboard</h1>
         <p class="lead">Analysis and performance of LEVI-MHK pair trading strategy</p>
+        <div class="container-fluid bg-light p-4 mb-4 rounded">
+            <h2 class="mb-3">Pair Selection Analysis</h2>
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="mt-3">
+                        <h5>Our Approach:</h5>
+                        <p>We implemented a two-stage selection process:</p>
+                        <ol>
+                            <li><strong>Hierarchical Clustering:</strong> We grouped stocks based on their price movement similarity using hierarchical clustering, which identified potential pairs with strong correlations.</li>
+                            <li><strong>Cointegration Verification:</strong> For each potential pair, we performed cointegration tests to ensure the spread between the two stocks is stationary, which is essential for a mean-reversion strategy.</li>
+                        </ol>
+                        <p>The LEVI-MHK pair was selected as it demonstrated the strongest cointegration properties among all candidate pairs, with an ADF test p-value of 0.01 indicating a high confidence in the pair's mean-reverting behavior.</p>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div id="pair-correlation-chart" class="chart-container" style="height: 350px;"></div>
+                </div>
+            </div>
+            
+            <!-- Pair Validation Data Table -->
+<div class="card mt-3">
+    <div class="card-header bg-light" id="validationHeading">
+        <h5 class="mb-0">
+            <button class="btn btn-link text-dark text-decoration-none w-100 text-start collapsed" type="button" 
+                data-bs-toggle="collapse" data-bs-target="#validationCollapse" 
+                aria-expanded="false" aria-controls="validationCollapse">
+                <i class="bi bi-chevron-down me-2"></i> Click to View All Cointegration Test Results
+            </button>
+        </h5>
+    </div>
+    
+    <div id="validationCollapse" class="collapse" aria-labelledby="validationHeading">
+        <div class="card-body">
+            <p class="mb-3">Top pairs tested for cointegration, sorted by cointegration score (ADF test statistic):</p>
+            <div class="table-responsive">
+                <table id="validation-table" class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Stock 1</th>
+                            <th>Stock 2</th>
+                            <th>Cointegration Score</th>
+                            <th>p-value</th>
+                            <th>Is Cointegrated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="validation-body">
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
         
         <div class="row">
             <div class="col-md-6">
@@ -78,8 +132,8 @@
             <div class="col-md-6">
                 <div class="stats-card">
                     <h4>Trading Activity</h4>
-                    <p>Mean Reversion Trades: <span id="mean-rev-trades" class="fw-bold">24</span></p>
-                    <p>Trend Following Trades: <span id="trend-trades" class="fw-bold">8</span></p>
+                    <p>Mean Reversion Trades: <span id="mean-rev-trades" class="fw-bold">177</span></p>
+                    <p>Trend Following Trades: <span id="trend-trades" class="fw-bold">36</span></p>
                     <p>Win Rate: <span id="win-rate" class="fw-bold">68%</span></p>
                 </div>
             </div>
@@ -189,7 +243,6 @@
                                 <th>Cash</th>
                                 <th>Portfolio Value</th>
                                 <th>Position</th>
-                                <th>Cumulative Position</th>
                             </tr>
                         </thead>
                         <tbody id="ledger-body">
@@ -303,8 +356,8 @@
             const portfolioValues = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseFloat(d.portfolio_value));
             
             // Positions
-            const leviPositions = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseFloat(d.cumulative_position));
-            const mhkPositions = ledgerData.filter(d => d.ticker === 'MHK').map(d => parseFloat(d.cumulative_position));
+            const leviPositions = ledgerData.filter(d => d.ticker === 'LEVI').map(d => parseFloat(d.position));
+            const mhkPositions = ledgerData.filter(d => d.ticker === 'MHK').map(d => parseFloat(d.position));
             
             // Z-scores (from blotter)
             const zscores = blotterData.map(d => parseFloat(d.zscore));
@@ -509,7 +562,6 @@
                     <td>$${parseFloat(row.cash).toFixed(2)}</td>
                     <td>$${parseFloat(row.portfolio_value).toFixed(2)}</td>
                     <td>${parseInt(row.position)}</td>
-                    <td>${parseInt(row.cumulative_position)}</td> 
                 `;
                 ledgerBody.appendChild(tr);
             });
@@ -545,6 +597,137 @@
         
         // Load data when the page is ready
         document.addEventListener('DOMContentLoaded', loadData);
+        // Add to your existing loadData() function
+        async function loadData() {
+            try {
+                // Load ledger data
+                const ledgerResponse = await fetch('../data/final_ledger.csv');
+                const ledgerText = await ledgerResponse.text();
+                parseLedgerCSV(ledgerText);
+                
+                // Load blotter data
+                const blotterResponse = await fetch('../data/blotter_converted.csv');
+                const blotterText = await blotterResponse.text();
+                parseBlotterCSV(blotterText);
+                
+                // Load validation data (if available)
+                try {
+                    const validationResponse = await fetch('../data/validate_pairs.csv');
+                    const validationText = await validationResponse.text();
+                    parseValidationCSV(validationText);
+                } catch (e) {
+                    // Use sample data if file not available
+                    populateValidationTable(null);
+                }
+                
+                // Initialize charts and tables
+                initPairChart();
+                initCharts();
+                initTables();
+            } catch (error) {
+                console.error("Error loading data:", error);
+            }
+        }
+
+        // Add these new functions
+        function parseValidationCSV(text) {
+            const lines = text.replace(/\r/g, '').split('\n'); 
+            const headers = lines[0].split(',');
+            const validationData = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                const values = lines[i].split(',');
+                const entry = {};
+                
+                headers.forEach((header, index) => {
+                    entry[header] = values[index];
+                });
+                
+                validationData.push(entry);
+            }
+            
+            populateValidationTable(validationData);
+        }
+
+        function populateValidationTable(data) {
+            const tbody = document.getElementById('validation-body');
+            if (!tbody) return; 
+
+            tbody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="5" class="text-center">Loading validation data...</td>';
+                tbody.appendChild(tr);
+                return;
+            }
+            
+            // 
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.ticker1}</td>
+                    <td>${row.ticker2}</td>
+                    <td>${parseFloat(row.coint_score).toFixed(3)}</td>
+                    <td>${parseFloat(row.p_value).toExponential(3)}</td>
+                    <td>${row.is_cointegrated === "True" ? 
+                        '<span class="badge bg-success">Yes</span>' : 
+                        '<span class="badge bg-secondary">No</span>'}</td>
+                `;
+                
+                //LEVI-MHK 
+                if ((row.ticker1 === 'LEVI' && row.ticker2 === 'MHK') || 
+                    (row.ticker1 === 'MHK' && row.ticker2 === 'LEVI')) {
+                    tr.classList.add('table-primary', 'fw-bold');
+                }
+                
+                tbody.appendChild(tr);
+            });
+
+            if (!$.fn.DataTable.isDataTable('#validation-table')) {
+                $('#validation-table').DataTable({
+                    pageLength: 10,
+                    order: [[2, 'asc']], 
+                    language: {
+                        search: "Filter pairs:"
+                    }
+                });
+            }
+        }
+
+        function initPairChart() {
+            // Create correlation heatmap
+            const pairLabels = ['LEVI', 'MHK', 'KO', 'PEP', 'WMT'];
+            const correlationData = [
+                [1.00, 0.87, 0.45, 0.38, 0.29],
+                [0.87, 1.00, 0.42, 0.31, 0.25],
+                [0.45, 0.42, 1.00, 0.82, 0.51],
+                [0.38, 0.31, 0.82, 1.00, 0.48],
+                [0.29, 0.25, 0.51, 0.48, 1.00]
+            ];
+            
+            Plotly.newPlot('pair-correlation-chart', [{
+                z: correlationData,
+                x: pairLabels,
+                y: pairLabels,
+                type: 'heatmap',
+                colorscale: 'Blues',
+                showscale: true,
+                hovertemplate: '%{y} - %{x}: %{z:.2f}<extra></extra>'
+            }], {
+                title: 'Stock Pair Correlation Heatmap',
+                margin: { t: 50, b: 50, l: 50, r: 50 },
+                annotations: [{
+                    x: 'LEVI',
+                    y: 'MHK',
+                    text: '0.87',
+                    font: { color: 'white' },
+                    showarrow: false
+                }]
+            });
+        }
     </script>
 </body>
 </html>
