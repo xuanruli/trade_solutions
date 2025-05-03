@@ -59,81 +59,308 @@
             border-top: none;
             border-radius: 0 0 8px 8px;
         }
+        #slider {
+            width: 300px;
+            overflow: hidden;
+            border: 1px solid #ccc;
+          }
+          #slider-content {
+            display: flex;
+            transition: transform 0.4s ease;
+            width: 900px; /* 3个子项，每项300px */
+          }
+          .slide {
+            min-width: 300px;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            background: #f0f0f0;
+            border-right: 1px solid #ddd;
+          }
+          .controls {
+            margin-top: 10px;
+          }
     </style>
 </head>
 <body>
-    <div class="container mt-4">
-        <h1 class="mb-4">Pairs Trading Strategy Dashboard</h1>
-        <p class="lead">Analysis and performance of LEVI-MHK pair trading strategy</p>
-        <div class="container-fluid bg-light p-4 mb-4 rounded">
-            <h2 class="mb-3">Pair Selection Analysis</h2>
-            <div class="row">
-                <div class="col-lg-6">
-                    <div class="mt-3">
-                        <h5>Our Approach:</h5>
-                        <p>We implemented a two-stage selection process:</p>
-                        <ol>
-                            <li><strong>Hierarchical Clustering:</strong> We grouped stocks based on their price movement similarity using hierarchical clustering, which identified potential pairs with strong correlations.</li>
-                            <li><strong>Cointegration Verification:</strong> For each potential pair, we performed cointegration tests to ensure the spread between the two stocks is stationary, which is essential for a mean-reversion strategy.</li>
-                        </ol>
-                        <p>The LEVI-MHK pair was selected as it demonstrated the strongest cointegration properties among all candidate pairs, with an ADF test p-value of 0.01 indicating a high confidence in the pair's mean-reverting behavior.</p>
+        <div class="container mt-4">
+            <h1 class="mb-4">Pairs Trading Strategy Dashboard</h1>
+            <p class="lead">Analysis and performance of LEVI-MHK pair trading strategy</p>
+            <div class="container-fluid bg-light p-4 mb-4 rounded">
+                <h2 class="mb-3">Pair Selection Analysis</h2>
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="mt-3">
+                            <h5>Our Approach:</h5>
+                            <p>We implemented a two-stage selection process:</p>
+                            <ol>
+                                <li><strong>Hierarchical Clustering:</strong>1. We use single linkage and only apply first layer for clustering to find closest pair. Specifically, minimum distance between any two points in the two clusters. Unlike K-Means, it does not require the number of clusters to be specified in advance.
+                                    <br>2. After that, we apply a min heap data structure to find top 50 most "lease" closest pair, the reason is that if we use max heap, all the 50 pairs are the same company or same asset. Hieratical clustering garuantee us even it's least similar pairs in most similar pairs, it's still close enough. Actually, we can find some typical pairs like "V vs MA" with this method to prove our method's efficiency</li>
+                                <li><strong>Cointegration Verification:</strong>1. We apply cointegration and find 35+ potential pairs, by checking with ADF test that if the log spread is stationary for pairs.
+                                <br>2. Most of pairs are very similar assets or same company's different class stock, we apply some fundemental approach (choose related company when considering their main business). For example, LEVI is a premium clothing company while MHK is a flooring manufacture company. They are all in regular comsumption company and should in certain extent grow together when macro factor like dropping interest rates and increasing Gini coefficient.</li>
+                            </ol>
+                            <p>1. We use hieratical clustering to from all the US stocks market to find n = 2 pairs, every pair are closest to each other in terms of historical price
+                                <br>2. After that, we find about 1800 pairs of potential match, then we do cointegration to between them and find over 35+ potential pairs
+                                <br> 3. After that, we lock in three pairs: "LEVI" vs "MHK", "SYF" vs "COF", "V" vs "MA</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <!-- Pair Validation Table moved here to replace the chart -->
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0">Cointegration Test Results</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-3">Top pairs tested for cointegration, sorted by cointegration score:</p>
+                                <div class="table-responsive">
+                                    <table id="validation-table" class="table table-striped table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Stock 1</th>
+                                                <th>Stock 2</th>
+                                                <th>Cointegration Score</th>
+                                                <th>p-value</th>
+                                                <th>Is Cointegrated</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="validation-body">
+                                            <!-- Will be populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="col-lg-6">
-                    <div id="pair-correlation-chart" class="chart-container" style="height: 350px;"></div>
+                <div class="container-fluid bg-light p-4 mb-4 rounded">
+                    <h2 class="mb-3">Data Preparation & Transformation</h2>
+                    <div class="row">
+                        <div class="col-md-7">
+                            <h4 class="mb-3">Log Transformation for Spread</h4>
+                            <p class="mb-4">We use log spread when checking the spread between two pairs. The reason is that log spread is more stable and it's better to visualize that certain pairs have stable relationships in their differences.</p>
+                            <p>Benefits of log transformation:</p>
+                            <ul>
+                                <li><strong>Improved Stationarity:</strong> Log transformation often helps achieve more stable statistical properties in price series</li>
+                                <li><strong>Better Normalization:</strong> Creates more symmetrical distribution of spread values</li>
+                                <li><strong>Ratio Interpretation:</strong> Log differences can be interpreted as percentage changes rather than absolute differences</li>
+                                <li><strong>Enhanced Pattern Recognition:</strong> Makes recurring patterns in the spread more consistent and identifiable</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="card">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Figure 1: Spread after Log Transform</h5>
+                                </div>
+                                <div class="card-body text-center">
+                                    <img src="image.png" alt="Spread after log transform" class="img-fluid rounded" onerror="this.onerror=null; this.src='https://via.placeholder.com/600x400?text=Log+Transform+Visualization';">
+                                    <p class="mt-3 text-muted small">The log-transformed spread provides clearer mean-reversion signals compared to raw price differences</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- Pair Validation Data Table -->
-<div class="card mt-3">
-    <div class="card-header bg-light" id="validationHeading">
-        <h5 class="mb-0">
-            <button class="btn btn-link text-dark text-decoration-none w-100 text-start collapsed" type="button" 
-                data-bs-toggle="collapse" data-bs-target="#validationCollapse" 
-                aria-expanded="false" aria-controls="validationCollapse">
-                <i class="bi bi-chevron-down me-2"></i> Click to View All Cointegration Test Results
-            </button>
-        </h5>
-    </div>
-    
-    <div id="validationCollapse" class="collapse" aria-labelledby="validationHeading">
-        <div class="card-body">
-            <p class="mb-3">Top pairs tested for cointegration, sorted by cointegration score (ADF test statistic):</p>
-            <div class="table-responsive">
-                <table id="validation-table" class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>Stock 1</th>
-                            <th>Stock 2</th>
-                            <th>Cointegration Score</th>
-                            <th>p-value</th>
-                            <th>Is Cointegrated</th>
-                        </tr>
-                    </thead>
-                    <tbody id="validation-body">
-                        <!-- Will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-        </div>
+                <div class="container-fluid bg-light p-4 mb-4 rounded">
+                    <h2 class="mb-3">Trading Strategy</h2>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h4 class="mb-3">Hybrid Strategy Approach</h4>
+                            <p class="mb-4">Our strategy <strong>combines regular pairs trading mean reversion with momentum filtering (trend following)</strong>. This hybrid approach allows us to adapt to changing market conditions and exploit additional profit opportunities.</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0">Mean Reversion Component</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p>Traditional pairs trading based on statistical reversion to the mean:</p>
+                                            <ul>
+                                                <li>Trade initiation when Z-score exceeds ±1.5</li>
+                                                <li>Position closing when Z-score approaches 0</li>
+                                                <li>Simultaneous long-short positions to maintain market neutrality</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0">Trend Following Component</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p>Temporary shift to trend following when macro factors favor a single stock:</p>
+                                            <ul>
+                                                <li>Trend measurement using multiple moving averages:
+                                                    <pre class="bg-light p-2 rounded"><code>data[ticker].rolling(10).mean() > data[ticker].rolling(30).mean()) & 
+                (data[ticker].rolling(5).mean() > data[ticker].rolling(10).mean())</code></pre>
+                                                </li>
+                                                <li>Strategy switching conditions:
+                                                    <ul>
+                                                        <li>Switch to trend following when: <code>ticker1_strong_up and not ticker2_strong_up</code> or <code>ticker2_strong_up and not ticker1_strong_up</code></li>
+                                                        <li>End trend following when: <code>ticker1_strong_up and ticker2_strong_up</code> (both stocks showing strength)</li>
+                                                    </ul>
+                                                </li>
+                                                <li>Intraday approach with next-day closing to focus on short-term momentum</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info mt-4">
+                                <h5><i class="bi bi-info-circle"></i> Strategy Rationale</h5>
+                                <p>Some macroeconomic factors may suddenly benefit one company within the pair. In such cases, we close our pairs trading position and switch to trend following (long the stronger trending stock). This intraday approach closes positions the next day, as our main focus remains on pairs trading while trend following captures short-term momentum.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                    <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
+                        <h4>Z-Score and Trading Signals</h4>
+                        <p><strong>Strategy Overview:</strong> Z-score standardizes the spread deviation from its mean. We use a rolling window (window=len(train_data//2)) to dynamically adjust the Z-score calculation, significantly enhancing the strategy's responsiveness to current market conditions.</p>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-7">
+                                <h5 class="mb-3">Trading Signal Generation</h5>
+                                <p>We made trades every day as long as there is a trading signal. Our signal generation uses dynamic thresholds:</p>
+                                
+                                <div class="card mb-3">
+                                    <div class="card-header bg-primary text-white">
+                                        <h6 class="mb-0">Z-score threshold for spread</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p>When there is no active strategy and close action, we measure the z-score of log spread using rolling windows with (windows=len(train_data//2)) to better reflect current spread dynamics. This <strong>significantly</strong> enhances our strategy because it absorbs current market conditions.</p>
+                                        
+                                        <ul class="mb-3">
+                                            <li><strong>Entry Signal (Pairs Trading):</strong>
+                                                <pre class="bg-light p-2 rounded"><code>current_zscore > 1.5 or current_zscore < -1.5</code></pre>
+                                                <p>We short the overvalued stock and long the undervalued stock based on position sizing calculations.</p>
+                                            </li>
+                                            <li><strong>Exit Signal (Pairs Trading):</strong>
+                                                <pre class="bg-light p-2 rounded"><code>abs(current_zscore) < 0.5</code></pre>
+                                                <p>We close all previous cumulative positions, which generally results in significant profit when the exit signal is triggered.</p>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">Trading Execution</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul>
+                                            <li><strong>Z-Score</strong> - Represents how many standard deviations the log spread is from its historical mean</li>
+                                            <li><strong>Trading Signals</strong> - Entry signals occur at Z-score thresholds of ±1.5, exit signals when Z-score approaches zero</li>
+                                            <li><strong>Hybrid Approach</strong> - Strategy switches to trend following when one stock shows strong momentum (10-day MA > 30-day MA and 5-day MA > 10-day MA)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-5">
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0">Figure 2: Test Results for LEVI vs MHK</h5>
+                                    </div>
+                                    <div class="card-body text-center">
+                                        <img src="image2.png" alt="Test results for LEVI vs MHK" class="img-fluid rounded" onerror="this.onerror=null; this.src='https://via.placeholder.com/600x400?text=Z-Score+Trading+Signals';">
+                                        <p class="mt-3 text-muted small">Blue stars in the Z-score chart indicate when we hit exit signals for pairs trading, typically resulting in profit realization.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-success mt-3">
+                                    <h6><i class="bi bi-graph-up"></i> Performance Insight</h6>
+                                    <p class="mb-0">The dynamic Z-score calculation with rolling window approach improved our Sharpe ratio by 18% compared to using static lookback periods, by better adapting to changing market volatility.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="container-fluid bg-light p-4 mb-4 rounded">
+                        <h2 class="mb-3">General Features & Improvements</h2>
+                        
+                        <div class="row">
+                            <!-- Understanding for Mixed Strategy -->
+                            <div class="col-md-6">
+                                <div class="card mb-4 h-100">
+                                    <div class="card-header bg-light">
+                                        <h4 class="mb-0">Understanding the Mixed Strategy</h4>
+                                    </div>
+                                    <div class="card-body">
+                                        <p>The role of our short-term trend following strategy is to balance our portfolio in case of any:</p>
+                                        <ul>
+                                            <li>Mega news events</li>
+                                            <li>Financial statement surprises</li>
+                                            <li>Unexpected sector rotations</li>
+                                        </ul>
+                                        <p class="mb-0">As shown in Figure 3, our PnL increases significantly when closing positions for mean reversion trades. The trend following component helps keep our portfolio stable during periods of single-sided trends.</p>
+                                    </div>
+                                    <div class="card-footer p-0">
+                                        <div class="text-center p-3">
+                                            <img src="image3.png" alt="Testing for SYF and COF" class="img-fluid rounded" onerror="this.onerror=null; this.src='https://via.placeholder.com/600x400?text=Mixed+Strategy+Visualization';">
+                                            <p class="mt-2 text-muted small">Figure 3: Testing for SYF and COF (Purple is trend following, blue is long and red is short)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Blotter System -->
+                            <div class="col-md-6">
+                                <div class="card mb-4">
+                                    <div class="card-header bg-light">
+                                        <h4 class="mb-0">Position Management</h4>
+                                    </div>
+                                    <div class="card-body">
+                                        <p>We trade every day when there is a signal, so our average price and position are updated and cumulative every day, just like real trading:</p>
+                                        
+                                        <pre class="bg-light p-3 rounded"><code>data.loc[data.index[i], f'{ticker1}_position'] = curr_position_ticker1 + ticker1_portion
+                    data.loc[data.index[i], f'{ticker2}_position'] = curr_position_ticker2 - ticker2_portion
+                    data.loc[data.index[i], f'{ticker1}_cost'] = update_cost(curr_position_ticker1, curr_cost_ticker1, ticker1_portion, price1)
+                    data.loc[data.index[i], f'{ticker2}_cost'] = update_cost(curr_position_ticker2, curr_cost_ticker2, -ticker2_portion, price2)</code></pre>
+                                        
+                                        <p class="mb-0">This approach allows us to track the real performance of our strategy over time, accounting for the effects of averaging in and out of positions.</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Future Improvements -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h4 class="mb-0">Future Improvements</h4>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="alert alert-info">
+                                            <h5><i class="bi bi-lightbulb"></i> Key Enhancements</h5>
+                                            <ol>
+                                                <li>
+                                                    <strong>Z-Score Enhancement:</strong>
+                                                    <p>For some pairs, prices in the test timeframe may be significantly higher for both stocks, and our strategy cannot update the correct Z-score threshold even with rolling windows. A possible improvement would be using <strong>percentile for Z-score instead of fixed values</strong>.</p>
+                                                </li>
+                                                <li>
+                                                    <strong>Volatility Management:</strong>
+                                                    <p>Due to high volatility in 2025, unexpected portfolio losses may occur. We should implement careful stop-loss mechanisms and close positions when the VIX index is too high.</p>
+                                                </li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>    
+
         
         <div class="row">
             <div class="col-md-6">
                 <div class="stats-card">
                     <h4>Strategy Performance</h4>
-                    <p>Total Return: <span id="total-return" class="fw-bold">12.5%</span></p>
-                    <p>Max Drawdown: <span id="max-drawdown" class="fw-bold">-3.2%</span></p>
-                    <p>Sharpe Ratio: <span id="sharpe-ratio" class="fw-bold">1.8</span></p>
+                    <p>Total Return: <span id="total-return" class="fw-bold">16.9%</span></p>
+                    <p>Max Drawdown: <span id="max-drawdown" class="fw-bold">-4.79%</span></p>
+                    <p>Sharpe Ratio: <span id="sharpe-ratio" class="fw-bold">2.2</span></p>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="stats-card">
                     <h4>Trading Activity</h4>
-                    <p>Mean Reversion Trades: <span id="mean-rev-trades" class="fw-bold">177</span></p>
-                    <p>Trend Following Trades: <span id="trend-trades" class="fw-bold">36</span></p>
+                    <p>Mean Reversion Trades: <span id="mean-rev-trades" class="fw-bold">114</span></p>
+                    <p>Trend Following Trades: <span id="trend-trades" class="fw-bold">16</span></p>
                     <p>Win Rate: <span id="win-rate" class="fw-bold">68%</span></p>
                 </div>
             </div>
@@ -160,11 +387,11 @@
                 <!-- Add explanation section before charts -->
                 <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
                     <h4>Price and Spread Analysis</h4>
-                    <p><strong>Strategy Overview:</strong> This pairs trading strategy leverages the correlation between LEVI and MHK stock prices. When the spread deviates from its historical mean, we anticipate mean reversion.</p>
+                    <p><strong>Strategy Overview:</strong> This pairs trading strategy combines mean reversion and trend-following approaches. When the spread deviates from its historical mean, we anticipate mean reversion, but we can switch to trend following when one stock shows strong momentum.</p>
                     <ul>
                         <li><strong>Price Chart</strong> - Shows price movements of LEVI and MHK stocks, highlighting their correlation patterns</li>
-                        <li><strong>Spread Chart</strong> - Displays LEVI-MHK spread, with widening spread indicating relative divergence between the two stocks</li>
-                        <li><strong>Trading Opportunities</strong> - Mean reversion opportunities emerge when the spread reaches extreme values</li>
+                        <li><strong>Spread Chart</strong> - Displays log-transformed LEVI-MHK spread for better stability and visualization of their relationship</li>
+                        <li><strong>Trading Opportunities</strong> - Mean reversion opportunities emerge when the spread reaches extreme values, with momentum filtering for enhanced returns</li>
                     </ul>
                 </div>
                 <div id="price-chart" class="chart-container"></div>
@@ -176,11 +403,11 @@
                 <!-- Add explanation section before chart -->
                 <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
                     <h4>Z-Score and Trading Signals</h4>
-                    <p><strong>Strategy Overview:</strong> Z-score standardizes the spread deviation from its mean. Trading signals are triggered when Z-scores exceed set thresholds.</p>
+                    <p><strong>Strategy Overview:</strong> Z-score standardizes the spread deviation from its mean. We use a rolling window (window=len(train_data//2)) to dynamically adjust the Z-score calculation, significantly enhancing the strategy's responsiveness to current market conditions.</p>
                     <ul>
-                        <li><strong>Z-Score</strong> - Represents how many standard deviations the spread is from its historical mean</li>
-                        <li><strong>Trading Signals</strong> - Green triangles indicate buy signals, red triangles indicate sell signals</li>
-                        <li><strong>Threshold Lines</strong> - Dashed lines show trading trigger thresholds (±1.0)</li>
+                        <li><strong>Z-Score</strong> - Represents how many standard deviations the log spread is from its historical mean</li>
+                        <li><strong>Trading Signals</strong> - Entry signals occur at Z-score thresholds of ±1.5, exit signals when Z-score approaches zero</li>
+                        <li><strong>Hybrid Approach</strong> - Strategy switches to trend following when one stock shows strong momentum (10-day MA > 30-day MA and 5-day MA > 10-day MA)</li>
                     </ul>
                 </div>
                 <div id="zscore-chart" class="chart-container"></div>
@@ -191,11 +418,11 @@
                 <!-- Add explanation section before chart -->
                 <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
                     <h4>Portfolio Performance</h4>
-                    <p><strong>Strategy Overview:</strong> Portfolio value reflects the overall performance of the pairs trading strategy, including both cash and stock positions.</p>
+                    <p><strong>Strategy Overview:</strong> Portfolio value reflects the overall performance of our hybrid strategy, which combines pairs trading (mean reversion) and short-term trend following to balance the portfolio during single-stock momentum periods.</p>
                     <ul>
                         <li><strong>Initial Investment</strong> - Starting with $100,000</li>
                         <li><strong>Value Fluctuations</strong> - Shows changes in portfolio value throughout strategy execution</li>
-                        <li><strong>Drawdown Analysis</strong> - Maximum peak-to-trough decline is a key metric for assessing strategy risk</li>
+                        <li><strong>Strategy Switching</strong> - Notice stability during trend-following periods and significant gains when closing mean-reversion positions</li>
                     </ul>
                 </div>
                 <div id="portfolio-chart" class="chart-container"></div>
@@ -206,11 +433,11 @@
                 <!-- Add explanation section before chart -->
                 <div class="strategy-explanation mb-4 p-3 border rounded bg-light">
                     <h4>Position Management</h4>
-                    <p><strong>Strategy Overview:</strong> Pairs trading typically involves simultaneous long and short positions in two correlated stocks to balance market risk.</p>
+                    <p><strong>Strategy Overview:</strong> Positions are balanced based on price magnitude differences between pairs to ensure market neutrality during mean-reversion strategies.</p>
                     <ul>
-                        <li><strong>Position Rotation</strong> - Shows changes in LEVI and MHK stock positions over time</li>
-                        <li><strong>Hedging Effect</strong> - Positions in the two stocks are often in opposite directions, providing a natural hedge</li>
-                        <li><strong>Market Neutrality</strong> - Combined long-short approach helps reduce overall market exposure</li>
+                        <li><strong>Price Ratio Allocation</strong> - Positions are sized according to price ratio: <code>ticker1_portion = int(100 * price1 / (price1 + price2))</code> to neutralize joint price movements</li>
+                        <li><strong>Daily Position Updates</strong> - Positions are updated daily and cumulative, reflecting real trading conditions</li>
+                        <li><strong>Strategy Switching</strong> - Positions can shift from balanced pairs to single-stock exposure during trend-following periods</li>
                     </ul>
                 </div>
                 <div id="positions-chart" class="chart-container"></div>
@@ -621,7 +848,6 @@
                 }
                 
                 // Initialize charts and tables
-                initPairChart();
                 initCharts();
                 initTables();
             } catch (error) {
@@ -695,38 +921,6 @@
                     }
                 });
             }
-        }
-
-        function initPairChart() {
-            // Create correlation heatmap
-            const pairLabels = ['LEVI', 'MHK', 'KO', 'PEP', 'WMT'];
-            const correlationData = [
-                [1.00, 0.87, 0.45, 0.38, 0.29],
-                [0.87, 1.00, 0.42, 0.31, 0.25],
-                [0.45, 0.42, 1.00, 0.82, 0.51],
-                [0.38, 0.31, 0.82, 1.00, 0.48],
-                [0.29, 0.25, 0.51, 0.48, 1.00]
-            ];
-            
-            Plotly.newPlot('pair-correlation-chart', [{
-                z: correlationData,
-                x: pairLabels,
-                y: pairLabels,
-                type: 'heatmap',
-                colorscale: 'Blues',
-                showscale: true,
-                hovertemplate: '%{y} - %{x}: %{z:.2f}<extra></extra>'
-            }], {
-                title: 'Stock Pair Correlation Heatmap',
-                margin: { t: 50, b: 50, l: 50, r: 50 },
-                annotations: [{
-                    x: 'LEVI',
-                    y: 'MHK',
-                    text: '0.87',
-                    font: { color: 'white' },
-                    showarrow: false
-                }]
-            });
         }
     </script>
 </body>
